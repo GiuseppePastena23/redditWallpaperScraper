@@ -36,7 +36,7 @@ class resolutionCheck:
     def start(self):
         deleted = 0
         aspect = calculate_aspect(self.width, self.height)
-        folder_dir = 'C:/Users/giuse/Pictures/Multithreaded-Reddit-Image-Downloader-master/images'
+        folder_dir = 'C:/Users/giuse/Pictures/Multithreaded-Reddit-Image-Downloader-master/images' #use a config.ini file to enter the url 
         for images in os.listdir(folder_dir):
             if (images.endswith(".png") or images.endswith(".jpg") or images.endswith(".jpeg")):
                 try:
