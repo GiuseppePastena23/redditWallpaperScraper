@@ -1,0 +1,1 @@
+rd /s "\\?\C:\Users\giuse\Pictures\Multithreaded-Reddit-Image-Downloader-master\images

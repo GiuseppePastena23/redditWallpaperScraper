@@ -5,7 +5,7 @@ import praw
 import configparser
 import concurrent.futures
 import argparse
-
+import subprocess
 
 class redditImageScraper:
     def __init__(self, sub, limit, order, nsfw=False):
@@ -52,6 +52,8 @@ class redditImageScraper:
                     ptolemy.map(self.download, images)
         except Exception as e:
             print(e)
+        
+	
 
 
 def main():
@@ -62,8 +64,11 @@ def main():
     required_args.add_argument('-o', type=str, help="order (new/top/hot)", required=True)
     args = parser.parse_args()
     scraper = redditImageScraper(args.s, args.i, args.o)
+    
     scraper.start()
+    
 
 
 if __name__ == '__main__':
     main()
+    
