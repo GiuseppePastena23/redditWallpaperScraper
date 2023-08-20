@@ -18,6 +18,7 @@ import configparser
 import concurrent.futures
 import argparse
 from PIL import UnidentifiedImageError
+from PyQt6.QtGui import QIcon
 
 config = configparser.ConfigParser()
 config.read('conf.ini')
@@ -36,17 +37,18 @@ def sub_exists(sub):
     return exists
 
 class Worker(QThread):
-    def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle):
+    def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle, window_instance):
         super().__init__()
         self.subName = subName
         self.imagesNum = imagesNum
         self.sortMethod = sortMethod
         self.nsfw_toggle = nsfw_toggle
+        self.window_instance = window_instance
         finished = QtCore.pyqtSignal()
         
 
     def run(self):
-        scraper = redditImageScraper(self.subName, self.imagesNum, self.sortMethod, self.nsfw_toggle)
+        scraper = redditImageScraper(self.subName, self.imagesNum, self.sortMethod, self.nsfw_toggle, self.window_instance)
         scraper.start()
         
         self.finished.emit()
@@ -54,17 +56,18 @@ class Worker(QThread):
     
 
 class redditImageScraper:
-    def __init__(self, sub, limit, order, nsfw):
+    def __init__(self, sub, limit, order, nsfw, window_instance):
         self.sub = sub
         self.limit = limit
         self.order = order
         self.nsfw = nsfw
+        self.window_instance = window_instance
         self.path = f'images/'
         self.reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
                                   client_secret=config['REDDIT']['client_secret'],
                                   user_agent='Multithreaded Reddit Image Downloader v2.0 (by u/impshum)')
         self.downloaded_count = 0
-        image_downloaded = QtCore.pyqtSignal()
+       
 
     def get_downloaded_count(self):
         return self.downloaded_count
@@ -73,7 +76,7 @@ class redditImageScraper:
         r = requests.get(image['url'])
         with open(image['fname'], 'wb') as f:
             f.write(r.content)
-            self.image_downloaded.emit()
+            self.window_instance.update_bar()
             self.downloaded_count += 1
 
     def start(self):
@@ -136,6 +139,10 @@ class Window(QWidget):
         self.sort_method.addItem('top')
         self.sort_method.addItem('hot')
         self.sort_method.addItem('new')
+
+        self.openDir = QPushButton("Open Folder", self)
+        self.openDir.setIcon(QIcon('folder.png'))
+        self.openDir.clicked.connect(self.open_dir)
         
 
         self.msg_label = QLabel("Insert Data")
@@ -148,40 +155,49 @@ class Window(QWidget):
         layout.addWidget(self.imagesNum)
         layout.addWidget(self.inputSub)
         layout.addWidget(self.generate)
+        layout.addWidget(self.openDir)
 
 
         self.setLayout(layout)
                 
 
     def button_click(self):
-        
+        self.progress_bar.reset()
+        self.generate.setEnabled(False)
         imagesNum = self.imagesNum.value()
         subName = str(self.inputSub.text())
         sortMethod = str(self.sort_method.currentText())
         nsfw_toggle = self.nsfw.isChecked()
         if(imagesNum == 0 or len(subName) == 0):
             self.msg_label.setText("Inserted Data are not valid")
+            self.generate.setEnabled(True)
             return None
         self.progress_bar.setRange(0, imagesNum)
         if(sub_exists(subName) == False):
            self.msg_label.setText("Subreddit name not valid")
+           self.generate.setEnabled(True)
            return None
         self.msg_label.setText("Downloading images...")
-        self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle)
+        self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
     
         self.worker.start()
         #downloaded_count = scraper.get_downloaded_count()
         #self.msg_label.setText("Downloaded " + str(downloaded_count) + " imag
-        pdb.set_trace()
-        self.scraper.image_downloaded.connect(self.update_bar)
         self.worker.finished.connect(self.worker_finished)
-        self.update_bar()
+
 
     def worker_finished(self):
         self.msg_label.setText("Done!")
+        self.generate.setEnabled(True)
+        if(self.progress_bar.value() < self.progress_bar.maximum()):
+            self.progress_bar.setValue(self.progress_bar.maximum())
+        
 
     def update_bar(self):
-        self.progress_bar.setValue(self.progress_bar.value() + 50)
+        self.progress_bar.setValue(self.progress_bar.value() + 1)
+
+    def open_dir():
+        print("")
         
         
                 
@@ -192,3 +208,4 @@ app = QApplication(sys.argv)
 window = Window()
 window.show()
 sys.exit(app.exec())
+
