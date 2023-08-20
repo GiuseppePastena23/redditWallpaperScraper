@@ -1,11 +1,16 @@
 import os
+import math 
+import PIL
+from PIL import Image
+from os import listdir
+import argparse
 import re
 import requests
 import praw
 import configparser
 import concurrent.futures
 import argparse
-import subprocess
+from PIL import UnidentifiedImageError
 
 class redditImageScraper:
     def __init__(self, sub, limit, order, nsfw=False):
