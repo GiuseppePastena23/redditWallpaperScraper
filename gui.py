@@ -26,6 +26,18 @@ config.read('conf.ini')
 reddit =  praw.Reddit(client_id=config['REDDIT']['client_id'],
                                   client_secret=config['REDDIT']['client_secret'],
                                   user_agent='RedditWallpaperScraper')
+images_dir = "C:/Users/giuse/Desktop/redditWallpaperScraper/images"
+
+def delete_files_in_directory(directory_path):
+   try:
+     files = os.listdir(directory_path)
+     for file in files:
+       file_path = os.path.join(directory_path, file)
+       if os.path.isfile(file_path):
+         os.remove(file_path)
+     print("All files deleted successfully.")
+   except OSError:
+     print("Error occurred while deleting files.")
 
 def internet_connection():
     try:
@@ -114,7 +126,7 @@ class redditImageScraper:
         except Exception as e:
             print(e)
 
-class MyTabWidget(QWidget):
+"""class MyTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
@@ -139,21 +151,49 @@ class MyTabWidget(QWidget):
   
         # Add tabs to widget
         self.layout.addWidget(self.tabs)
-        self.setLayout(self.layout)
+        self.setLayout(self.layout)"""
 
 
-class Window(QWidget):
+class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.file = images_dir
+        self.setWindowTitle("Settings")
         
+        layout = QHBoxLayout()
+
+        self.dir_label = QLabel()
+        self.update_label()
+        self.change_dir = QPushButton("Change")
+        self.change_dir.clicked.connect(self.change_directory)
+
+        layout.addWidget(self.dir_label)
+        layout.addWidget(self.change_dir)
+
+        self.setLayout(layout)
+
+    def change_directory(self):
+        self.file = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        self.update_label()
+
+    def update_label(self):
+        global images_dir
+        images_dir = self.file
+        self.dir_label.setText("dir: " + self.file)
+
+class Window(QWidget):
+    
+    def __init__(self):
+        super().__init__()
+
         self.setWindowTitle("RedditImageScraper")
         
         layout = QVBoxLayout()
 
         if(internet_connection()):
 
-            self.tab_widget = MyTabWidget(self)
-
+            #self.tab_widget = MyTabWidget(self)
+            file = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
             self.generate = QPushButton("Generate", self)
             self.generate.clicked.connect(self.button_click)
             
@@ -185,7 +225,15 @@ class Window(QWidget):
             self.msg_label = QLabel("Insert Data")
             self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            layout.addWidget(self.tab_widget)
+            self.setting_btn = QPushButton("Settings")
+            self.setting_btn.clicked.connect(self.open_settings)
+
+            self.delete_all = QPushButton("Delete all images")
+            self.delete_all.clicked.connect(self.delete_images)
+            
+
+            #layout.addWidget(self.tab_widget)
+            layout.addWidget(self.setting_btn)
             layout.addWidget(self.progress_bar)
             layout.addWidget(self.msg_label)
             layout.addWidget(self.nsfw)
@@ -194,20 +242,22 @@ class Window(QWidget):
             layout.addWidget(self.inputSub)
             layout.addWidget(self.generate)
             layout.addWidget(self.openDir)
-
-            
-            
-
-
-        
-
+            layout.addWidget(self.delete_all)
             
         else:
             self.noInternet = QLabel("Connect To Internet And Retry!")
             layout.addWidget(self.noInternet)
 
         self.setLayout(layout)
+
+    def delete_images(self):
+        delete_files_in_directory(images_dir)
         
+    
+
+    def open_settings(self):
+        self.window = SettingsWindow()
+        self.window.show()
 
     def button_click(self):
         self.progress_bar.reset()
@@ -246,7 +296,7 @@ class Window(QWidget):
 
     def open_dir(self):
         try:
-            os.startfile("C:Users/giuse/Desktop/redditWallpaperScraper/imaes")
+            os.startfile(images_dir)
         except:
             self.msg_label.setText("Cannot find the requested directory")
         
@@ -259,4 +309,5 @@ app = QApplication(sys.argv)
 window = Window()
 window.show()
 sys.exit(app.exec())
+
 
