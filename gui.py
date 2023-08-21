@@ -27,6 +27,13 @@ reddit =  praw.Reddit(client_id=config['REDDIT']['client_id'],
                                   client_secret=config['REDDIT']['client_secret'],
                                   user_agent='RedditWallpaperScraper')
 
+def internet_connection():
+    try:
+        response = requests.get("https://www.google.com", timeout=1)
+        return True
+    except requests.ConnectionError:
+        return False  
+
 
 def sub_exists(sub):
     exists = True
@@ -106,7 +113,33 @@ class redditImageScraper:
                     ptolemy.map(self.download, images)
         except Exception as e:
             print(e)
-    
+
+class MyTabWidget(QWidget):
+    def __init__(self, parent):
+        super(QWidget, self).__init__(parent)
+        self.layout = QVBoxLayout(self)
+  
+        # Initialize tab screen
+        self.tabs = QTabWidget()
+        self.tab1 = QWidget()
+        self.tab2 = QWidget()
+        self.tab3 = QWidget()
+        self.tabs.resize(300, 200)
+  
+        # Add tabs
+        self.tabs.addTab(self.tab1, "General")
+        self.tabs.addTab(self.tab3, "Settings")
+  
+        # Create first tab
+        self.tab1.layout = QVBoxLayout(self)
+        self.l = QLabel()
+        self.l.setText("This is the first tab")
+        self.tab1.layout.addWidget(self.l)
+        self.tab1.setLayout(self.tab1.layout)
+  
+        # Add tabs to widget
+        self.layout.addWidget(self.tabs)
+        self.setLayout(self.layout)
 
 
 class Window(QWidget):
@@ -114,52 +147,67 @@ class Window(QWidget):
         super().__init__()
         
         self.setWindowTitle("RedditImageScraper")
-
+        
         layout = QVBoxLayout()
-    
-        self.generate = QPushButton("Generate", self)
-        self.generate.clicked.connect(self.button_click)
+
+        if(internet_connection()):
+
+            self.tab_widget = MyTabWidget(self)
+
+            self.generate = QPushButton("Generate", self)
+            self.generate.clicked.connect(self.button_click)
+            
+            
+            self.inputSub = QLineEdit(self)
+            
+
+            self.imagesNum = QSpinBox(self)
+            self.imagesNum.setRange(0, 5000)
+
+            self.current_value = 0
+            self.progress_bar = QProgressBar(self)
+            self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+
+            self.nsfw = QCheckBox("nsfw",self)
+            
+
+            self.sort_method = QComboBox(self)
+            self.sort_method.addItem('top')
+            self.sort_method.addItem('hot')
+            self.sort_method.addItem('new')
+
+            self.openDir = QPushButton("Open Folder", self)
+            self.openDir.setIcon(QIcon('folder.png'))
+            self.openDir.clicked.connect(self.open_dir)
+            
+
+            self.msg_label = QLabel("Insert Data")
+            self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            layout.addWidget(self.tab_widget)
+            layout.addWidget(self.progress_bar)
+            layout.addWidget(self.msg_label)
+            layout.addWidget(self.nsfw)
+            layout.addWidget(self.sort_method)
+            layout.addWidget(self.imagesNum)
+            layout.addWidget(self.inputSub)
+            layout.addWidget(self.generate)
+            layout.addWidget(self.openDir)
+
+            
+            
+
+
         
-        
-        self.inputSub = QLineEdit(self)
-        
 
-        self.imagesNum = QSpinBox(self)
-        self.imagesNum.setRange(0, 5000)
-
-        self.current_value = 0
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-
-        self.nsfw = QCheckBox("nsfw",self)
-        
-
-        self.sort_method = QComboBox(self)
-        self.sort_method.addItem('top')
-        self.sort_method.addItem('hot')
-        self.sort_method.addItem('new')
-
-        self.openDir = QPushButton("Open Folder", self)
-        self.openDir.setIcon(QIcon('folder.png'))
-        self.openDir.clicked.connect(self.open_dir)
-        
-
-        self.msg_label = QLabel("Insert Data")
-        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.msg_label)
-        layout.addWidget(self.nsfw)
-        layout.addWidget(self.sort_method)
-        layout.addWidget(self.imagesNum)
-        layout.addWidget(self.inputSub)
-        layout.addWidget(self.generate)
-        layout.addWidget(self.openDir)
-
+            
+        else:
+            self.noInternet = QLabel("Connect To Internet And Retry!")
+            layout.addWidget(self.noInternet)
 
         self.setLayout(layout)
-                
+        
 
     def button_click(self):
         self.progress_bar.reset()
@@ -196,8 +244,11 @@ class Window(QWidget):
     def update_bar(self):
         self.progress_bar.setValue(self.progress_bar.value() + 1)
 
-    def open_dir():
-        print("")
+    def open_dir(self):
+        try:
+            os.startfile("C:Users/giuse/Desktop/redditWallpaperScraper/imaes")
+        except:
+            self.msg_label.setText("Cannot find the requested directory")
         
         
                 
