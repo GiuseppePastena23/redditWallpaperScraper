@@ -6,7 +6,7 @@ import sys
 import pdb
 import os
 from prawcore import NotFound
-import math 
+import math
 import PIL
 from PIL import Image
 from os import listdir
@@ -23,28 +23,30 @@ from PyQt6.QtGui import QIcon
 config = configparser.ConfigParser()
 config.read('conf.ini')
 
-reddit =  praw.Reddit(client_id=config['REDDIT']['client_id'],
-                                  client_secret=config['REDDIT']['client_secret'],
-                                  user_agent='RedditWallpaperScraper')
-images_dir = "C:/Users/giuse/Desktop/redditWallpaperScraper/images"
+reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
+                     client_secret=config['REDDIT']['client_secret'],
+                     user_agent='RedditWallpaperScraper')
+images_dir = "C:/Users/giuse/Desktop/redditWallpaperScraper/images/" 
+
 
 def delete_files_in_directory(directory_path):
-   try:
-     files = os.listdir(directory_path)
-     for file in files:
-       file_path = os.path.join(directory_path, file)
-       if os.path.isfile(file_path):
-         os.remove(file_path)
-     print("All files deleted successfully.")
-   except OSError:
-     print("Error occurred while deleting files.")
+    try:
+        files = os.listdir(directory_path)
+        for file in files:
+            file_path = os.path.join(directory_path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        print("All files deleted successfully.")
+    except OSError:
+        print("Error occurred while deleting files.")
+
 
 def internet_connection():
     try:
         response = requests.get("https://www.google.com", timeout=1)
         return True
     except requests.ConnectionError:
-        return False  
+        return False
 
 
 def sub_exists(sub):
@@ -55,6 +57,7 @@ def sub_exists(sub):
         exists = False
     return exists
 
+
 class Worker(QThread):
     def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle, window_instance):
         super().__init__()
@@ -64,15 +67,16 @@ class Worker(QThread):
         self.nsfw_toggle = nsfw_toggle
         self.window_instance = window_instance
         finished = QtCore.pyqtSignal()
-        
 
     def run(self):
-        scraper = redditImageScraper(self.subName, self.imagesNum, self.sortMethod, self.nsfw_toggle, self.window_instance)
+        scraper = redditImageScraper(
+            self.subName, self.imagesNum, self.sortMethod, self.nsfw_toggle, self.window_instance)
+
         scraper.start()
-        
+
+        self.window_instance.downloaded_images = scraper.get_downloaded_count()
         self.finished.emit()
 
-    
 
 class redditImageScraper:
     def __init__(self, sub, limit, order, nsfw, window_instance):
@@ -81,12 +85,11 @@ class redditImageScraper:
         self.order = order
         self.nsfw = nsfw
         self.window_instance = window_instance
-        self.path = f'images/'
+        self.path = f'{images_dir}'
         self.reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
                                   client_secret=config['REDDIT']['client_secret'],
                                   user_agent='Multithreaded Reddit Image Downloader v2.0 (by u/impshum)')
         self.downloaded_count = 0
-       
 
     def get_downloaded_count(self):
         return self.downloaded_count
@@ -95,7 +98,7 @@ class redditImageScraper:
         r = requests.get(image['url'])
         with open(image['fname'], 'wb') as f:
             f.write(r.content)
-            self.window_instance.update_bar()
+            #self.window_instance.update_bar(self.get_downloaded_count())
             self.downloaded_count += 1
 
     def start(self):
@@ -111,8 +114,9 @@ class redditImageScraper:
 
             for submission in submissions:
                 if not submission.stickied and submission.over_18 == self.nsfw \
-                    and submission.url.endswith(('jpg', 'jpeg', 'png')):
-                    fname = self.path + re.search('(?s:.*)\w/(.*)', submission.url).group(1)
+                        and submission.url.endswith(('jpg', 'jpeg', 'png')):
+                    fname = self.path + \
+                        re.search('(?s:.*)\w/(.*)', submission.url).group(1)
                     if not os.path.isfile(fname):
                         images.append({'url': submission.url, 'fname': fname})
                         go += 1
@@ -125,6 +129,7 @@ class redditImageScraper:
                     ptolemy.map(self.download, images)
         except Exception as e:
             print(e)
+
 
 """class MyTabWidget(QWidget):
     def __init__(self, parent):
@@ -159,7 +164,7 @@ class SettingsWindow(QWidget):
         super().__init__()
         self.file = images_dir
         self.setWindowTitle("Settings")
-        
+
         layout = QHBoxLayout()
 
         self.dir_label = QLabel()
@@ -173,7 +178,8 @@ class SettingsWindow(QWidget):
         self.setLayout(layout)
 
     def change_directory(self):
-        self.file = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        self.file = str(QFileDialog.getExistingDirectory(
+            self, "Select Directory") + "/")
         self.update_label()
 
     def update_label(self):
@@ -181,133 +187,126 @@ class SettingsWindow(QWidget):
         images_dir = self.file
         self.dir_label.setText("dir: " + self.file)
 
+
 class Window(QWidget):
-    
+
     def __init__(self):
         super().__init__()
-
+        self.downloaded_images = 9999
         self.setWindowTitle("RedditImageScraper")
-        
+
         layout = QVBoxLayout()
 
-        if(internet_connection()):
+        # self.tab_widget = MyTabWidget(self)
+        self.generate = QPushButton("Generate", self)
+        self.generate.clicked.connect(self.button_click)
 
-            #self.tab_widget = MyTabWidget(self)
-            file = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
-            self.generate = QPushButton("Generate", self)
-            self.generate.clicked.connect(self.button_click)
-            
-            
-            self.inputSub = QLineEdit(self)
-            
+        self.inputSub = QLineEdit(self)
 
-            self.imagesNum = QSpinBox(self)
-            self.imagesNum.setRange(0, 5000)
+        self.imagesNum = QSpinBox(self)
+        self.imagesNum.setRange(0, 5000)
 
-            self.current_value = 0
-            self.progress_bar = QProgressBar(self)
-            self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
+        self.current_value = 0
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            self.nsfw = QCheckBox("nsfw",self)
-            
+        self.nsfw = QCheckBox("nsfw", self)
 
-            self.sort_method = QComboBox(self)
-            self.sort_method.addItem('top')
-            self.sort_method.addItem('hot')
-            self.sort_method.addItem('new')
+        self.sort_method = QComboBox(self)
+               
 
-            self.openDir = QPushButton("Open Folder", self)
-            self.openDir.setIcon(QIcon('folder.png'))
-            self.openDir.clicked.connect(self.open_dir)
-            
+        self.sort_method.addItem('top')
+        self.sort_method.addItem('hot')
+        self.sort_method.addItem('new')
 
-            self.msg_label = QLabel("Insert Data")
-            self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.openDir = QPushButton("Open Folder", self)
+        self.openDir.setIcon(QIcon('folder.png'))
+        self.openDir.clicked.connect(self.open_dir)
 
-            self.setting_btn = QPushButton("Settings")
-            self.setting_btn.clicked.connect(self.open_settings)
+        self.msg_label = QLabel("Insert Data")
+        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            self.delete_all = QPushButton("Delete all images")
-            self.delete_all.clicked.connect(self.delete_images)
-            
+        self.setting_btn = QPushButton("Settings")
+        self.setting_btn.clicked.connect(self.open_settings)
 
-            #layout.addWidget(self.tab_widget)
-            layout.addWidget(self.setting_btn)
-            layout.addWidget(self.progress_bar)
-            layout.addWidget(self.msg_label)
-            layout.addWidget(self.nsfw)
-            layout.addWidget(self.sort_method)
-            layout.addWidget(self.imagesNum)
-            layout.addWidget(self.inputSub)
-            layout.addWidget(self.generate)
-            layout.addWidget(self.openDir)
-            layout.addWidget(self.delete_all)
-            
-        else:
-            self.noInternet = QLabel("Connect To Internet And Retry!")
-            layout.addWidget(self.noInternet)
+        self.delete_all = QPushButton("Delete all images")
+        self.delete_all.clicked.connect(self.delete_images)
+
+        # layout.addWidget(self.tab_widget)
+        layout.addWidget(self.setting_btn)
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.msg_label)
+        layout.addWidget(self.nsfw)
+        layout.addWidget(self.sort_method)
+        layout.addWidget(self.imagesNum)
+        layout.addWidget(self.inputSub)
+        layout.addWidget(self.generate)
+        layout.addWidget(self.openDir)
+        layout.addWidget(self.delete_all)
+
+        
 
         self.setLayout(layout)
 
     def delete_images(self):
         delete_files_in_directory(images_dir)
-        
-    
 
     def open_settings(self):
         self.window = SettingsWindow()
         self.window.show()
 
     def button_click(self):
-        self.progress_bar.reset()
-        self.generate.setEnabled(False)
-        imagesNum = self.imagesNum.value()
-        subName = str(self.inputSub.text())
-        sortMethod = str(self.sort_method.currentText())
-        nsfw_toggle = self.nsfw.isChecked()
-        if(imagesNum == 0 or len(subName) == 0):
-            self.msg_label.setText("Inserted Data are not valid")
-            self.generate.setEnabled(True)
-            return None
-        self.progress_bar.setRange(0, imagesNum)
-        if(sub_exists(subName) == False):
-           self.msg_label.setText("Subreddit name not valid")
-           self.generate.setEnabled(True)
-           return None
-        self.msg_label.setText("Downloading images...")
-        self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
-    
-        self.worker.start()
-        #downloaded_count = scraper.get_downloaded_count()
-        #self.msg_label.setText("Downloaded " + str(downloaded_count) + " imag
-        self.worker.finished.connect(self.worker_finished)
+        if (internet_connection()):
+            self.progress_bar.setValue(0)
+            self.generate.setEnabled(False)
+            imagesNum = self.imagesNum.value()
+            subName = str(self.inputSub.text())
+            sortMethod = str(self.sort_method.currentText())
+            nsfw_toggle = self.nsfw.isChecked()
+            if (imagesNum == 0 or len(subName) == 0):
+                self.msg_label.setText("Inserted Data are not valid")
+                self.generate.setEnabled(True)
+                return None
+            self.progress_bar.setMaximum(imagesNum)
+            if (sub_exists(subName) == False):
+                self.msg_label.setText("Subreddit name not valid")
+                self.generate.setEnabled(True)
+                return None
+            self.msg_label.setText("Downloading images...")
+            self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
 
+            
+            self.worker.start()
+            # downloaded_count = scraper.get_downloaded_count()
+            # self.msg_label.setText("Downloaded " + str(downloaded_count) + " imag
+            self.worker.finished.connect(self.worker_finished)
+            
+            #if self.worker_finished and self.downloaded_images < imagesNum:
+            #    self.msg_label.setText("The number of images requested exceeded the available images in r/" + subName)
+        else:
+            self.msg_label.setText("Connect To Internet And Retry!")
 
     def worker_finished(self):
-        self.msg_label.setText("Done!")
+        self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.imagesNum.value()))
         self.generate.setEnabled(True)
-        if(self.progress_bar.value() < self.progress_bar.maximum()):
+        if (self.progress_bar.value() < self.progress_bar.maximum()):
             self.progress_bar.setValue(self.progress_bar.maximum())
-        
 
-    def update_bar(self):
-        self.progress_bar.setValue(self.progress_bar.value() + 1)
+    def update_bar(self, value):
+            try:
+                self.progress_bar.setValue(value)
+            except:
+                return None
 
     def open_dir(self):
         try:
             os.startfile(images_dir)
         except:
             self.msg_label.setText("Cannot find the requested directory")
-        
-        
-                
-        
 
 
-app = QApplication(sys.argv)
-window = Window()
-window.show()
-sys.exit(app.exec())
-
-
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    window = Window()
+    window.show()
+    sys.exit(app.exec())
