@@ -57,6 +57,27 @@ def sub_exists(sub):
         exists = False
     return exists
 
+class DialogYN(QDialog):
+    def __init__(self, msg):
+        super().__init__()
+
+        self.setWindowTitle("HELLO!")
+
+        QBtn = QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+
+        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        self.layout = QVBoxLayout()
+        message = QLabel(msg)
+        self.layout.addWidget(message)
+        self.layout.addWidget(self.buttonBox)
+        self.setLayout(self.layout)
+    
+
+
+
 
 class Worker(QThread):
     completed = pyqtSignal()
@@ -248,7 +269,11 @@ class Window(QWidget):
         self.setLayout(layout)
 
     def delete_images(self):
-        delete_files_in_directory(images_dir)
+        button = QMessageBox.question(self, "Confirm Deletion", "Delete All images in:\n" + images_dir + " ?")
+        if button == QMessageBox.StandardButton.Yes:
+            delete_files_in_directory(images_dir)
+        
+        
 
     def open_settings(self):
         self.window = SettingsWindow()
