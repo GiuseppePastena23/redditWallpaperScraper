@@ -59,37 +59,28 @@ def sub_exists(sub):
 
 
 class Worker(QThread):
+    completed = pyqtSignal()
+    image_download = pyqtSignal(int)
     def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle, window_instance):
         super().__init__()
-        self.subName = subName
-        self.imagesNum = imagesNum
-        self.sortMethod = sortMethod
-        self.nsfw_toggle = nsfw_toggle
-        self.window_instance = window_instance
-        finished = QtCore.pyqtSignal()
-
-    def run(self):
-        scraper = redditImageScraper(
-            self.subName, self.imagesNum, self.sortMethod, self.nsfw_toggle, self.window_instance)
-
-        scraper.start()
-
-        self.window_instance.downloaded_images = scraper.get_downloaded_count()
-        self.finished.emit()
-
-
-class redditImageScraper:
-    def __init__(self, sub, limit, order, nsfw, window_instance):
-        self.sub = sub
-        self.limit = limit
-        self.order = order
-        self.nsfw = nsfw
+        self.sub = subName
+        self.limit = imagesNum
+        self.order = sortMethod
+        self.nsfw = nsfw_toggle
         self.window_instance = window_instance
         self.path = f'{images_dir}'
         self.reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
                                   client_secret=config['REDDIT']['client_secret'],
                                   user_agent='Multithreaded Reddit Image Downloader v2.0 (by u/impshum)')
         self.downloaded_count = 0
+        
+
+    def run(self):
+        
+        self.startScraper()
+        self.window_instance.downloaded_images = self.get_downloaded_count()
+        self.completed.emit()
+    
 
     def get_downloaded_count(self):
         return self.downloaded_count
@@ -99,9 +90,11 @@ class redditImageScraper:
         with open(image['fname'], 'wb') as f:
             f.write(r.content)
             #self.window_instance.update_bar(self.get_downloaded_count())
+            
             self.downloaded_count += 1
+            self.image_download.emit(self.downloaded_count)
 
-    def start(self):
+    def startScraper(self):
         images = []
         try:
             go = 0
@@ -129,6 +122,12 @@ class redditImageScraper:
                     ptolemy.map(self.download, images)
         except Exception as e:
             print(e)
+
+
+
+        
+
+    
 
 
 """class MyTabWidget(QWidget):
@@ -277,6 +276,7 @@ class Window(QWidget):
 
             
             self.worker.start()
+            self.worker.image_download.connect(self.update_bar)
             # downloaded_count = scraper.get_downloaded_count()
             # self.msg_label.setText("Downloaded " + str(downloaded_count) + " imag
             self.worker.finished.connect(self.worker_finished)
@@ -293,10 +293,8 @@ class Window(QWidget):
             self.progress_bar.setValue(self.progress_bar.maximum())
 
     def update_bar(self, value):
-            try:
-                self.progress_bar.setValue(value)
-            except:
-                return None
+        if(self.progress_bar.value() < self.progress_bar.maximum()):
+            self.progress_bar.setValue(value)
 
     def open_dir(self):
         try:
