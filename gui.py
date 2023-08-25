@@ -76,8 +76,10 @@ class DialogYN(QDialog):
         self.setLayout(self.layout)
     
 class Worker(QThread):
+    # SIGNALS
     completed = pyqtSignal()
     image_download = pyqtSignal(int)
+
     def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle, window_instance):
         super().__init__()
         self.sub = subName
@@ -93,11 +95,9 @@ class Worker(QThread):
         
 
     def run(self):
-        
         self.startScraper()
         self.window_instance.downloaded_images = self.get_downloaded_count()
         self.completed.emit()
-    
 
     def get_downloaded_count(self):
         return self.downloaded_count
@@ -106,8 +106,6 @@ class Worker(QThread):
         r = requests.get(image['url'])
         with open(image['fname'], 'wb') as f:
             f.write(r.content)
-            #self.window_instance.update_bar(self.get_downloaded_count())
-            
             self.downloaded_count += 1
             self.image_download.emit(self.downloaded_count)
 
@@ -140,7 +138,7 @@ class Worker(QThread):
         except Exception as e:
             print(e)
    
-class SettingsWindow(QWidget):
+'''class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
         
@@ -167,8 +165,8 @@ class SettingsWindow(QWidget):
     def update_label(self):
         global images_dir
         images_dir = self.file
-        self.dir_label.setText("dir: " + self.file)
-    
+        self.dir_label.setText("dir: " + self.file)'''
+
 class Window(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -190,10 +188,11 @@ class Window(QWidget):
         # FIRST TAB
         self.tab1.layout = QVBoxLayout(self)
 
-        # WIDGETS
+        # widgets
         # Generate Button
         self.generate = QPushButton("Generate", self)
         self.generate.clicked.connect(self.start_scraper)
+        self.generate.setFixedHeight(40)
 
         # Subreddit Name 
         self.inputSub = QLineEdit(self)
@@ -223,29 +222,30 @@ class Window(QWidget):
 
         # Messages Label
         self.msg_label = QLabel("Insert Data")
-        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg_label.setFixedHeight(15)
+        
 
         # Delete All Button
         self.delete_all = QPushButton("Delete all images")
         self.delete_all.clicked.connect(self.delete_images)
 
-        # Layout 
-        self.tab1.layout.addWidget(self.generate)
-        self.tab1.layout.addWidget(self.imagesNum)
-        self.tab1.layout.addWidget(self.inputSub)
-        self.tab1.layout.addWidget(self.progress_bar)
-        self.tab1.layout.addWidget(self.nsfw)
-        self.tab1.layout.addWidget(self.sort_method)
-        self.tab1.layout.addWidget(self.openDir)
+        # layout
         self.tab1.layout.addWidget(self.msg_label)
+        self.tab1.layout.addWidget(self.progress_bar)
+        self.tab1.layout.addWidget(self.inputSub)
+        self.tab1.layout.addWidget(self.imagesNum)
+        self.tab1.layout.addWidget(self.sort_method)
+        self.tab1.layout.addWidget(self.nsfw)
+        self.tab1.layout.addWidget(self.openDir)
         self.tab1.layout.addWidget(self.delete_all)
+        self.tab1.layout.addWidget(self.generate)
     
         self.tab1.setLayout(self.tab1.layout)
 
         # SECOND TAB
         self.tab2.layout = QHBoxLayout(self)
         
-        #WIDGETS
+        # widgets 
         # Directory Label
         self.dir_label = QLabel()
         self.update_label()
@@ -253,10 +253,19 @@ class Window(QWidget):
         self.change_dir = QPushButton("Change")
         self.change_dir.clicked.connect(self.change_directory)
 
-        # Layout 
+        # layout
         self.tab2.layout.addWidget(self.dir_label)
         self.tab2.layout.addWidget(self.change_dir)
         self.tab2.setLayout(self.tab2.layout)
+
+        # THIRD TAB
+        self.tab3.layout = QVBoxLayout(self)
+        
+        # widgets
+
+        # layout 
+        #self.tab3.layout.addWidget(self.widget_name)
+        self.tab3.setLayout(self.tab3.layout)
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)
@@ -327,62 +336,12 @@ class Window(QWidget):
             self.progress_bar.setValue(value)
 
 class App(QMainWindow):
-
     def __init__(self):
         super().__init__()
-        
-        
         self.setWindowTitle("RedditImageScraper")
-        self.resize(350, 400)
+        self.resize(250, 400)
         self.tab = Window(self)
         self.setCentralWidget(self.tab)
-
-        # self.tab_widget = MyTabWidget(self)
-        '''self.generate = QPushButton("Generate", self)
-        self.generate.clicked.connect(self.button_click)
-
-        self.inputSub = QLineEdit(self)
-
-        self.imagesNum = QSpinBox(self)
-        self.imagesNum.setRange(0, 5000)
-
-        self.current_value = 0
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.nsfw = QCheckBox("nsfw", self)
-
-        self.sort_method = QComboBox(self)
-               
-
-        self.sort_method.addItem('top')
-        self.sort_method.addItem('hot')
-        self.sort_method.addItem('new')
-
-        self.openDir = QPushButton("Open Folder", self)
-        self.openDir.setIcon(QIcon('folder.png'))
-        self.openDir.clicked.connect(self.open_dir)
-
-        self.msg_label = QLabel("Insert Data")
-        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.setting_btn = QPushButton("Settings")
-        self.setting_btn.clicked.connect(self.open_settings)
-
-        self.delete_all = QPushButton("Delete all images")
-        self.delete_all.clicked.connect(self.delete_images)'''
-
-        # layout.addWidget(self.tab_widget)
-        '''layout.addWidget(self.setting_btn)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.msg_label)
-        layout.addWidget(self.nsfw)
-        layout.addWidget(self.sort_method)
-        layout.addWidget(self.imagesNum)
-        layout.addWidget(self.inputSub)
-        layout.addWidget(self.generate)
-        layout.addWidget(self.openDir)
-        layout.addWidget(self.delete_all)'''
        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
