@@ -5,6 +5,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import sys
 import pdb
 import os
+from fractions import Fraction
 from prawcore import NotFound
 import math
 import PIL
@@ -19,6 +20,7 @@ import concurrent.futures
 import argparse
 from PIL import UnidentifiedImageError
 from PyQt6.QtGui import QIcon
+import pyautogui
 
 # GLOBAL VARIABLE
 config = configparser.ConfigParser()
@@ -55,26 +57,63 @@ def sub_exists(sub):
     except NotFound:
         exists = False
     return exists
-
-# WINDOWS
-class DialogYN(QDialog):
-    def __init__(self, msg):
-        super().__init__()
-
-        self.setWindowTitle("HELLO!")
-
-        QBtn = QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
-
-        self.buttonBox = QDialogButtonBox(QBtn)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
-
-        self.layout = QVBoxLayout()
-        message = QLabel(msg)
-        self.layout.addWidget(message)
-        self.layout.addWidget(self.buttonBox)
-        self.setLayout(self.layout)
     
+process_manager = []
+
+#THREADS
+
+class resWorker(QThread):
+    def __init__(self, width, height, ratio, minw, minh):
+        self.width = width
+        self.height = height
+        self.ratio = ratio
+        self.minw = minw
+        self.minh = minh
+
+    def start(self):
+        deleted = 0
+        if(self.height != 0):
+            aspect = self.calculate_aspect(self.width, self.height)
+        """self.minh = 720
+        if(aspect == 7):
+            self.minw = 960
+        if(aspect == 25):
+            self.minw = 1280"""
+        folder_dir = images_dir
+        for images in os.listdir(folder_dir):
+            if (images.endswith(".png") or images.endswith(".jpg") or images.endswith(".jpeg")):
+                try:
+                    img = PIL.Image.open(os.path.join(folder_dir, images))
+                except PIL.UnidentifiedImageError:
+                    continue
+                wid, hgt = img.size
+                if(self.ratio == True):
+                        if(self.calculate_aspect(wid, hgt) != aspect or wid <= hgt or wid < self.minw or hgt < self.minh):
+                            deleted += 1
+                            img.close()
+                            os.remove(os.path.join(folder_dir, images))
+                            continue
+                else:
+                        if(wid <= hgt or wid < self.minw or hgt < self.minh):
+                            deleted += 1
+                            img.close()
+                            os.remove(os.path.join(folder_dir, images))
+                            continue   
+    
+    def calculate_aspect(self, width: int, height: int):
+        aspect_ratio_decimal = width / height
+        
+        base_ratios = {
+            "4/3": 4 / 3,
+            "16/9": 16 / 9,
+            "16/10": 16 / 10
+        }
+        tolerance = 0.01
+        
+        for base_ratio, base_ratio_decimal in base_ratios.items():
+            if abs(aspect_ratio_decimal - base_ratio_decimal) < tolerance:
+                return str(base_ratio)
+        
 class Worker(QThread):
     # SIGNALS
     completed = pyqtSignal()
@@ -137,7 +176,25 @@ class Worker(QThread):
                     ptolemy.map(self.download, images)
         except Exception as e:
             print(e)
-   
+# WINDOWS
+class DialogYN(QDialog):
+    def __init__(self, msg):
+        super().__init__()
+
+        self.setWindowTitle("HELLO!")
+
+        QBtn = QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+
+        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        self.layout = QVBoxLayout()
+        message = QLabel(msg)
+        self.layout.addWidget(message)
+        self.layout.addWidget(self.buttonBox)
+        self.setLayout(self.layout)
+    
 '''class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -172,6 +229,20 @@ class Window(QWidget):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.file = images_dir
+        self.q = Queue()
+
+        #STYLESHEET
+        self.setStyleSheet("""
+        QProgressBar {
+            border: 1px solid lightgray;
+            border-radius: 5px;
+            text-align: center;
+            background-color: white;
+        }
+        QProgressBar::chunk {
+            background-color: green;
+        }
+        """)
 
         # Initialize tab screen
         self.tabs = QTabWidget()
@@ -185,7 +256,13 @@ class Window(QWidget):
         self.tabs.addTab(self.tab3, "Check Res")
         self.tabs.addTab(self.tab2, "Settings")
   
-        # FIRST TAB
+        # GENERAL
+        # Group Box
+        self.groupbox = QGroupBox("")
+        self.groupbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.vbox = QVBoxLayout()
+        self.groupbox.setLayout(self.vbox)
+
         self.tab1.layout = QVBoxLayout(self)
 
         # widgets
@@ -196,14 +273,17 @@ class Window(QWidget):
 
         # Subreddit Name 
         self.inputSub = QLineEdit(self)
+        self.inputSub.setFixedWidth(150)
 
         # Images Number 
         self.imagesNum = QSpinBox(self)
         self.imagesNum.setRange(0, 5000)
+        self.imagesNum.setFixedWidth(60)
+        self.imagesNum.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Progress Bar
-        self.current_value = 0
         self.progress_bar = QProgressBar(self)
+        self.progress_bar.setValue(0)
         self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Nsfw Toggle
@@ -211,44 +291,47 @@ class Window(QWidget):
 
         # Sort Method combo 
         self.sort_method = QComboBox(self)
+        self.sort_method.setFixedWidth(50)
         self.sort_method.addItem('top')
         self.sort_method.addItem('hot')
         self.sort_method.addItem('new')
+
+        # Messages Label
+        self.msg_label = QLabel("Insert Data")
+        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg_label.setFixedHeight(20)
+        
+        # layout
+        # Group Box
+        self.tab1.layout.addWidget(self.progress_bar)
+        self.tab1.layout.addWidget(self.msg_label)
+
+        self.tab1.layout.addWidget(self.groupbox)
+        self.vbox.addWidget(self.inputSub)
+        self.vbox.addWidget(self.imagesNum)
+        self.vbox.addWidget(self.sort_method)
+        self.vbox.addWidget(self.nsfw)
+        self.vbox.addWidget(self.generate)
+        
+        self.tab1.setLayout(self.tab1.layout)
+
+        # SETTINGS
+        self.tab2.layout = QVBoxLayout(self)
+        
+        # widgets 
+        # Delete All Button
+        self.delete_all = QPushButton("Delete all images")
+        self.delete_all.clicked.connect(self.delete_images)
 
         # Open Dir Button
         self.openDir = QPushButton("Open Folder", self)
         self.openDir.setIcon(QIcon('folder.png'))
         self.openDir.clicked.connect(self.open_dir)
 
-        # Messages Label
-        self.msg_label = QLabel("Insert Data")
-        self.msg_label.setFixedHeight(15)
-        
-
-        # Delete All Button
-        self.delete_all = QPushButton("Delete all images")
-        self.delete_all.clicked.connect(self.delete_images)
-
-        # layout
-        self.tab1.layout.addWidget(self.msg_label)
-        self.tab1.layout.addWidget(self.progress_bar)
-        self.tab1.layout.addWidget(self.inputSub)
-        self.tab1.layout.addWidget(self.imagesNum)
-        self.tab1.layout.addWidget(self.sort_method)
-        self.tab1.layout.addWidget(self.nsfw)
-        self.tab1.layout.addWidget(self.openDir)
-        self.tab1.layout.addWidget(self.delete_all)
-        self.tab1.layout.addWidget(self.generate)
-    
-        self.tab1.setLayout(self.tab1.layout)
-
-        # SECOND TAB
-        self.tab2.layout = QHBoxLayout(self)
-        
-        # widgets 
         # Directory Label
         self.dir_label = QLabel()
         self.update_label()
+        
         # Change Dir Button
         self.change_dir = QPushButton("Change")
         self.change_dir.clicked.connect(self.change_directory)
@@ -256,15 +339,56 @@ class Window(QWidget):
         # layout
         self.tab2.layout.addWidget(self.dir_label)
         self.tab2.layout.addWidget(self.change_dir)
+        self.tab2.layout.addWidget(self.openDir)
+        self.tab2.layout.addWidget(self.delete_all)
+
         self.tab2.setLayout(self.tab2.layout)
 
-        # THIRD TAB
+        # CHECK RES
+        self.width_layout = QHBoxLayout(self)
+        self.height_layout = QHBoxLayout(self)
         self.tab3.layout = QVBoxLayout(self)
         
         # widgets
+        # Run Automatically 
+        self.to_run_auto = QCheckBox("Run After Generating", self)
+
+        # Run Button
+        self.run_button= QPushButton("Run", self)
+        self.run_button.clicked.connect(self.run_rescheck)
+
+        # Check Aspect Ratio
+        self.check_ar = QCheckBox("Check Aspect Ratio", self)
+
+        # Use own resolution
+        self.use_screenres = QCheckBox("Use Display Resolution", self)
+        self.use_screenres.stateChanged.connect(self.status_changed)
+
+        size = pyautogui.size()
+        # Input Width
+        width = str(size[0])
+        self.width_input = QLineEdit(width, self)
+        self.width_label = QLabel("width:")
+        self.width_layout.addWidget(self.width_label)
+        self.width_layout.addWidget(self.width_input)
+        
+        
+        # Input Height
+        height = str(size[1])
+        self.height_input = QLineEdit(height, self)
+        self.height_label = QLabel("height:")
+        self.height_layout.addWidget(self.height_label)
+        self.height_layout.addWidget(self.height_input)
+
 
         # layout 
-        #self.tab3.layout.addWidget(self.widget_name)
+        
+        self.tab3.layout.addWidget(self.to_run_auto)
+        self.tab3.layout.addWidget(self.check_ar)
+        self.tab3.layout.addWidget(self.use_screenres)
+        self.tab3.layout.addLayout(self.width_layout)
+        self.tab3.layout.addLayout(self.height_layout)
+        self.tab3.layout.addWidget(self.run_button)
         self.tab3.setLayout(self.tab3.layout)
 
         # Add tabs to widget
@@ -290,11 +414,17 @@ class Window(QWidget):
 
     def start_scraper(self):
         if (internet_connection()):
+            # Check if there are other processes working 
+            
             self.progress_bar.setValue(0)
             imagesNum = self.imagesNum.value()
             subName = str(self.inputSub.text())
             sortMethod = str(self.sort_method.currentText())
             nsfw_toggle = self.nsfw.isChecked()
+            
+            if(not self.q.isEmpty()):
+                self.q.AddItem(subName)
+            
 
             # check if data has been entered
             if (imagesNum == 0 or len(subName) == 0):
@@ -309,7 +439,7 @@ class Window(QWidget):
             
             # Everything Good
             self.msg_label.setText("Downloading images...")
-            self.generate.setEnabled(False)
+            #self.generate.setEnabled(False)
             self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
             self.worker.start()
             # Connect Signals
@@ -319,17 +449,42 @@ class Window(QWidget):
             self.msg_label.setText("Connect To a Network And Retry!")
 
     # More Functions
+    def status_changed(self, value):
+        state = Qt.CheckState(value)
+        if state == Qt.CheckState.Checked:
+            size = pyautogui.size()
+            self.width_input.setText(str(size[0]))
+            self.height_input.setText(str(size[1]))
+            self.width_label.setEnabled(False)
+            self.width_input.setEnabled(False)
+            self.height_input.setEnabled(False)
+        else:
+            self.width_input.setEnabled(True)
+            self.height_input.setEnabled(True)
+
+
+    def run_rescheck(self):
+        width = int(self.width_input.text())
+        height = int(self.height_input.text())
+        ratio = self.check_ar.isChecked()
+        minw = 1280
+        minh = 720
+        res_check = resWorker(width, height, ratio, minw, minh)
+        res_check.start()
 
     def update_label(self):
         global images_dir
         images_dir = self.file
-        self.dir_label.setText("dir: " + self.file)
+        self.dir_label.setText("dir:\n" + self.file)
+        self.dir_label.adjustSize()
 
     def worker_finished(self):
         self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.imagesNum.value()))
         self.generate.setEnabled(True)
         if (self.progress_bar.value() < self.progress_bar.maximum()):
             self.progress_bar.setValue(self.progress_bar.maximum())
+        if(self.to_run_auto.isChecked()):
+            self.run_rescheck()
 
     def update_bar(self, value):
         if(self.progress_bar.value() < self.progress_bar.maximum()):
@@ -339,7 +494,7 @@ class App(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RedditImageScraper")
-        self.resize(250, 400)
+        self.setFixedSize(300, 400)
         self.tab = Window(self)
         self.setCentralWidget(self.tab)
        
