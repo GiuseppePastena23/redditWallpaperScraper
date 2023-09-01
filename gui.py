@@ -3,15 +3,17 @@ from PyQt6.QtCore import *
 from PyQt6 import QtCore
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 import sys
-import pdb
+
 import os
+import cv2
+import numpy as np
 from fractions import Fraction
+import time
 from prawcore import NotFound
-import math
+
 import PIL
 from PIL import Image
 from os import listdir
-import argparse
 import re
 import requests
 import praw
@@ -63,42 +65,77 @@ process_manager = []
 #THREADS
 
 class resWorker(QThread):
-    def __init__(self, width, height, ratio, minw, minh):
+    def __init__(self, width, height, ratio, minw, minh, type):
+        super().__init__()
         self.width = width
         self.height = height
         self.ratio = ratio
         self.minw = minw
         self.minh = minh
+        self.type = type
+        self.deleted = 0 
 
     def start(self):
-        deleted = 0
         if(self.height != 0):
             aspect = self.calculate_aspect(self.width, self.height)
-        """self.minh = 720
-        if(aspect == 7):
-            self.minw = 960
-        if(aspect == 25):
-            self.minw = 1280"""
+
         folder_dir = images_dir
+        thresh = 130.0
+
+
+        # RESOLUTION CHECK
         for images in os.listdir(folder_dir):
             if (images.endswith(".png") or images.endswith(".jpg") or images.endswith(".jpeg")):
                 try:
                     img = PIL.Image.open(os.path.join(folder_dir, images))
                 except PIL.UnidentifiedImageError:
                     continue
+                image = cv2.imread(os.path.join(folder_dir, images))
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                fm = self.variance_of_laplacian(gray)
+                if(fm < thresh):
+                    img.close()
+                    os.remove(os.path.join(folder_dir, images))
+                    continue
                 wid, hgt = img.size
                 if(self.ratio == True):
                         if(self.calculate_aspect(wid, hgt) != aspect or wid <= hgt or wid < self.minw or hgt < self.minh):
-                            deleted += 1
+                            self.deleted += 1
                             img.close()
                             os.remove(os.path.join(folder_dir, images))
                             continue
                 else:
                         if(wid <= hgt or wid < self.minw or hgt < self.minh):
-                            deleted += 1
+                            self.deleted += 1
                             img.close()
                             os.remove(os.path.join(folder_dir, images))
                             continue   
+                # CHECK BRIGHT OR DARK
+                
+                if(not(self.type == "both")):
+                    if(self.type == "bright" and self.isbright(image) or self.type == "dark" and not(self.isbright(image))):
+                        continue
+                    elif(self.type == "bright" and not(self.isbright(image)) or self.type == "dark" and self.isbright(image)):
+                        img.close()
+                        os.remove(os.path.join(folder_dir, images))
+                
+
+    # Credits to imneonizer(https://github.com/imneonizer) for his project 'How-to-find-if-an-image-is-bright-or-dark' (https://github.com/imneonizer/How-to-find-if-an-image-is-bright-or-dark)
+    def isbright(self, image, dim=100, thresh=0.3):
+         # Resize image to 10x10
+        image = cv2.resize(image, (dim, dim))
+        # Convert color space to LAB format and extract L channel
+        L, A, B = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2LAB))
+        # Normalize L channel by dividing all pixel values with maximum pixel value
+        L = L/np.max(L)
+        # Return True if mean is greater than thresh else False
+        return np.mean(L) > thresh
+    
+    def variance_of_laplacian(self, image):
+        return cv2.Laplacian(image, cv2.CV_64F).var()
+
+    def get_deleted(self):
+        return self.deleted
     
     def calculate_aspect(self, width: int, height: int):
         aspect_ratio_decimal = width / height
@@ -113,7 +150,8 @@ class resWorker(QThread):
         for base_ratio, base_ratio_decimal in base_ratios.items():
             if abs(aspect_ratio_decimal - base_ratio_decimal) < tolerance:
                 return str(base_ratio)
-        
+
+# Credits to impshum(https://github.com/impshum) for his project 'Multithreaded-Reddit-Image-Downloader'(https://github.com/impshum/Multithreaded-Reddit-Image-Downloader)
 class Worker(QThread):
     # SIGNALS
     completed = pyqtSignal()
@@ -229,7 +267,6 @@ class Window(QWidget):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.file = images_dir
-        self.q = Queue()
 
         #STYLESHEET
         self.setStyleSheet("""
@@ -242,6 +279,37 @@ class Window(QWidget):
         QProgressBar::chunk {
             background-color: green;
         }
+                           
+        QPushButton {
+            border: 1px solid #c6c6c6;
+            border-radius: 2px;
+            text-align: center;
+            background-color: lightgray;
+        }
+                           
+        QPushButton:hover {
+            background-color: lightblue;
+        }
+        
+        QPushButton:pressed {
+            border: 2px solid lightblue;
+        }
+                           
+        QLineEdit {
+            border: 1px solid lightgray;
+            border-radius: 4px;
+        }
+                           
+        QLineEdit:hover,
+        QLineEdit:focused {
+            border: 2px solid #d3d3d3;
+        }
+                           
+        QSpinBox {
+            border-radius: 2px;
+            border: 1px solid #c6c6c6
+        }
+        
         """)
 
         # Initialize tab screen
@@ -274,11 +342,13 @@ class Window(QWidget):
         # Subreddit Name 
         self.inputSub = QLineEdit(self)
         self.inputSub.setFixedWidth(150)
+        self.inputSub.setFixedHeight(30)
 
         # Images Number 
         self.imagesNum = QSpinBox(self)
         self.imagesNum.setRange(0, 5000)
         self.imagesNum.setFixedWidth(60)
+        self.imagesNum.setFixedHeight(30)
         self.imagesNum.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Progress Bar
@@ -289,9 +359,10 @@ class Window(QWidget):
         # Nsfw Toggle
         self.nsfw = QCheckBox("nsfw", self)
 
-        # Sort Method combo 
+        # sort_method combo 
         self.sort_method = QComboBox(self)
         self.sort_method.setFixedWidth(50)
+        self.sort_method.setFixedHeight(30)
         self.sort_method.addItem('top')
         self.sort_method.addItem('hot')
         self.sort_method.addItem('new')
@@ -313,9 +384,13 @@ class Window(QWidget):
         self.vbox.addWidget(self.nsfw)
         self.vbox.addWidget(self.generate)
         
+        self.tab1.layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.tab1.setLayout(self.tab1.layout)
+        
 
         # SETTINGS
+
+        self.dir_layout = QVBoxLayout(self)
         self.tab2.layout = QVBoxLayout(self)
         
         # widgets 
@@ -327,18 +402,22 @@ class Window(QWidget):
         self.openDir = QPushButton("Open Folder", self)
         self.openDir.setIcon(QIcon('folder.png'))
         self.openDir.clicked.connect(self.open_dir)
+    
 
         # Directory Label
         self.dir_label = QLabel()
         self.update_label()
-        
         # Change Dir Button
         self.change_dir = QPushButton("Change")
         self.change_dir.clicked.connect(self.change_directory)
 
+        self.dir_layout.addWidget(self.dir_label)
+        self.dir_layout.addWidget(self.change_dir)
+        
+        
         # layout
         self.tab2.layout.addWidget(self.dir_label)
-        self.tab2.layout.addWidget(self.change_dir)
+        self.tab2.layout.addLayout(self.dir_layout)
         self.tab2.layout.addWidget(self.openDir)
         self.tab2.layout.addWidget(self.delete_all)
 
@@ -356,6 +435,7 @@ class Window(QWidget):
         # Run Button
         self.run_button= QPushButton("Run", self)
         self.run_button.clicked.connect(self.run_rescheck)
+        self.run_button.setFixedHeight(40)
 
         # Check Aspect Ratio
         self.check_ar = QCheckBox("Check Aspect Ratio", self)
@@ -363,6 +443,17 @@ class Window(QWidget):
         # Use own resolution
         self.use_screenres = QCheckBox("Use Display Resolution", self)
         self.use_screenres.stateChanged.connect(self.status_changed)
+
+        # msg label
+        self.res_msglabel = QLabel("")
+
+        # dark bright or both  
+        self.type_selector = QComboBox(self)
+        self.type_selector.setFixedWidth(50)
+        self.type_selector.setFixedHeight(30)
+        self.type_selector.addItem('both')
+        self.type_selector.addItem('bright')
+        self.type_selector.addItem('dark')
 
         size = pyautogui.size()
         # Input Width
@@ -388,6 +479,7 @@ class Window(QWidget):
         self.tab3.layout.addWidget(self.use_screenres)
         self.tab3.layout.addLayout(self.width_layout)
         self.tab3.layout.addLayout(self.height_layout)
+        self.tab3.layout.addWidget(self.type_selector)
         self.tab3.layout.addWidget(self.run_button)
         self.tab3.setLayout(self.tab3.layout)
 
@@ -422,9 +514,6 @@ class Window(QWidget):
             sortMethod = str(self.sort_method.currentText())
             nsfw_toggle = self.nsfw.isChecked()
             
-            if(not self.q.isEmpty()):
-                self.q.AddItem(subName)
-            
 
             # check if data has been entered
             if (imagesNum == 0 or len(subName) == 0):
@@ -438,6 +527,8 @@ class Window(QWidget):
                 return None
             
             # Everything Good
+            #if(len(process_manager) == 0)
+
             self.msg_label.setText("Downloading images...")
             #self.generate.setEnabled(False)
             self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
@@ -449,6 +540,7 @@ class Window(QWidget):
             self.msg_label.setText("Connect To a Network And Retry!")
 
     # More Functions
+    
     def status_changed(self, value):
         state = Qt.CheckState(value)
         if state == Qt.CheckState.Checked:
@@ -467,16 +559,24 @@ class Window(QWidget):
         width = int(self.width_input.text())
         height = int(self.height_input.text())
         ratio = self.check_ar.isChecked()
+        type = self.type_selector.currentText()
         minw = 1280
         minh = 720
-        res_check = resWorker(width, height, ratio, minw, minh)
-        res_check.start()
+        self.res_check = resWorker(width, height, ratio, minw, minh, type)
+        self.res_check.start()
+        #self.res_check.finished.connect(self.res_checkfin)
+
+    def res_checkfin(self):
+        deleted = self.res_check.get_deleted()
+        self.res_msglabel.setText("Deleted Images: " + deleted)
+        time.sleep(3)
+        self.res_msglabel.setText("")
+
 
     def update_label(self):
         global images_dir
         images_dir = self.file
         self.dir_label.setText("dir:\n" + self.file)
-        self.dir_label.adjustSize()
 
     def worker_finished(self):
         self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.imagesNum.value()))
