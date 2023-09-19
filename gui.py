@@ -30,7 +30,7 @@ config.read('conf.ini')
 reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
                      client_secret=config['REDDIT']['client_secret'],
                      user_agent='RedditWallpaperScraper')
-images_dir = "C:/Users/giuse/Desktop/redditWallpaperScraper/images/" 
+images_dir = "" 
 
 # GLOBAL FUNCTIONS 
 def delete_files_in_directory(directory_path):
@@ -340,6 +340,8 @@ class Window(QWidget):
         
         """)
 
+        
+
         # Initialize tab screen
         self.tabs = QTabWidget()
         self.tab1 = QWidget()
@@ -507,9 +509,15 @@ class Window(QWidget):
         self.height_layout.addWidget(self.height_label)
         self.height_layout.addWidget(self.height_input)
 
+        # msg label
+        self.msg_labelres = QLabel("a")
+        self.msg_labelres.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg_labelres.setFixedHeight(20)
+
 
         # layout 
         
+        self.tab3.layout.addWidget(self.msg_labelres)
         self.tab3.layout.addWidget(self.to_run_auto)
         self.tab3.layout.addWidget(self.check_ar)
         self.tab3.layout.addWidget(self.use_screenres)
@@ -522,6 +530,8 @@ class Window(QWidget):
         # Add tabs to widget
         self.layout.addWidget(self.tabs)
         self.setLayout(self.layout)
+
+        
 
     # Buttons Functions 
     def add_sub(self):
@@ -557,7 +567,7 @@ class Window(QWidget):
         self.update_label()
 
     def start_scraper(self):
-        if (internet_connection()):
+        if (internet_connection() and len(self.sub_list) != 0):
             # Check if there are other processes working 
             
             '''self.progress_bar.setValue(0)
@@ -579,6 +589,9 @@ class Window(QWidget):
                 return None'''
             _len = 0
 
+            if len(images_dir) <= 3:
+                self.msg_label.setText("No directory selected!")
+
             for request in self.sub_list:
 
                 _len += request.images_num
@@ -589,6 +602,8 @@ class Window(QWidget):
 
             self.worker = worker1(self.sub_list, self.progress_bar, self.msg_label, self)
             self.worker.start()
+        elif(len(self.sub_list) <= 0):
+            self.msg_label.setText("Add requests to generate")
         else: # Network not working 
             self.msg_label.setText("Connect To a Network And Retry!")
 
@@ -617,13 +632,11 @@ class Window(QWidget):
         minh = 720
         self.res_check = ResWorker(width, height, ratio, minw, minh, _type)
         self.res_check.start()
-        #self.res_check.finished.connect(self.res_checkfin)
+        self.res_check.finished.connect(self.res_checkfin)
 
     def res_checkfin(self):
         deleted = self.res_check.get_deleted()
-        self.res_msglabel.setText("Deleted Images: " + deleted)
-        time.sleep(3)
-        self.res_msglabel.setText("")
+        self.msg_labelres.setText("Deleted Images: " + deleted)
 
 
     def update_label(self):
@@ -656,9 +669,14 @@ class App(QMainWindow):
         self.setFixedSize(300, 400)
         self.tab = Window(self)
         self.setCentralWidget(self.tab)
+
+        
+
        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = App()
     window.show()
+    if len(images_dir) == 0:
+            window.tab.change_directory()
     sys.exit(app.exec())
