@@ -1,28 +1,27 @@
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6 import QtCore
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
-import sys
-
 import os
+import re
+import sys
+import PIL
 import cv2
 import numpy as np
 from fractions import Fraction
 import time
 from prawcore import NotFound
-
-import PIL
-from PIL import Image
-from os import listdir
-import re
+from PIL import Image, UnidentifiedImageError
 import requests
 import praw
 import configparser
 import concurrent.futures
-import argparse
-from PIL import UnidentifiedImageError
-from PyQt6.QtGui import QIcon
 import pyautogui
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QGroupBox, QProgressBar, QCheckBox, QComboBox,
+    QSpinBox, QLabel, QLineEdit, QDialog, QDialogButtonBox, QMessageBox,
+    QTabWidget, QFileDialog
+)
+from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal
+from PyQt6.QtGui import QIcon
+
 
 # GLOBAL VARIABLE
 config = configparser.ConfigParser()
@@ -47,7 +46,7 @@ def delete_files_in_directory(directory_path):
 
 def internet_connection():
     try:
-        response = requests.get("https://www.google.com", timeout=1)
+        requests.get("https://www.google.com", timeout=1)
         return True
     except requests.ConnectionError:
         return False
@@ -64,7 +63,14 @@ process_manager = []
 
 #THREADS
 
-class resWorker(QThread):
+class Request():
+    def __init__(self, sub, images_num, sort_method, nsfw):
+        self.sub = sub
+        self.images_num = images_num
+        self.sort_method = sort_method
+        self.nsfw = nsfw
+
+class ResWorker(QThread):
     def __init__(self, width, height, ratio, minw, minh, type):
         super().__init__()
         self.width = width
@@ -112,7 +118,7 @@ class resWorker(QThread):
                             continue   
                 # CHECK BRIGHT OR DARK
                 
-                if(not(self.type == "both")):
+                if(self.type != "both"):
                     if(self.type == "bright" and self.isbright(image) or self.type == "dark" and not(self.isbright(image))):
                         continue
                     elif(self.type == "bright" and not(self.isbright(image)) or self.type == "dark" and self.isbright(image)):
@@ -125,7 +131,7 @@ class resWorker(QThread):
          # Resize image to 10x10
         image = cv2.resize(image, (dim, dim))
         # Convert color space to LAB format and extract L channel
-        L, A, B = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2LAB))
+        L, _, _ = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2LAB))
         # Normalize L channel by dividing all pixel values with maximum pixel value
         L = L/np.max(L)
         # Return True if mean is greater than thresh else False
@@ -150,6 +156,28 @@ class resWorker(QThread):
         for base_ratio, base_ratio_decimal in base_ratios.items():
             if abs(aspect_ratio_decimal - base_ratio_decimal) < tolerance:
                 return str(base_ratio)
+            
+class worker1(QThread):
+    def __init__(self, sub_list, prog_bar, msg_label, window_instance):
+        super().__init__()
+        self.sub_list = sub_list 
+        self.prog_bar = prog_bar
+        self.window_instance = window_instance
+        self.msg_label = msg_label
+
+    def run(self):
+        self.startWorker()
+        
+    def startWorker(self):
+        for request in self.sub_list:
+                    self.prog_bar.setValue(0)
+                    self.msg_label.setText("Downloading images!")
+                    self.worker = Worker(request.sub, request.images_num, request.sort_method, request.nsfw, self.window_instance)
+                    # Connect Signals
+                    self.worker.image_download.connect(self.window_instance.update_bar)
+                    self.worker.finished.connect(self.window_instance.worker_finished)
+                    self.worker.start()
+                    self.worker.wait()
 
 # Credits to impshum(https://github.com/impshum) for his project 'Multithreaded-Reddit-Image-Downloader'(https://github.com/impshum/Multithreaded-Reddit-Image-Downloader)
 class Worker(QThread):
@@ -157,11 +185,11 @@ class Worker(QThread):
     completed = pyqtSignal()
     image_download = pyqtSignal(int)
 
-    def __init__(self, subName, imagesNum, sortMethod, nsfw_toggle, window_instance):
+    def __init__(self, sub_name, images_num, sort_method, nsfw_toggle, window_instance):
         super().__init__()
-        self.sub = subName
-        self.limit = imagesNum
-        self.order = sortMethod
+        self.sub = sub_name
+        self.limit = images_num
+        self.order = sort_method
         self.nsfw = nsfw_toggle
         self.window_instance = window_instance
         self.path = f'{images_dir}'
@@ -201,7 +229,7 @@ class Worker(QThread):
                 if not submission.stickied and submission.over_18 == self.nsfw \
                         and submission.url.endswith(('jpg', 'jpeg', 'png')):
                     fname = self.path + \
-                        re.search('(?s:.*)\w/(.*)', submission.url).group(1)
+                        re.search('.*\w/(.*)', submission.url).group(1)
                     if not os.path.isfile(fname):
                         images.append({'url': submission.url, 'fname': fname})
                         go += 1
@@ -221,9 +249,9 @@ class DialogYN(QDialog):
 
         self.setWindowTitle("HELLO!")
 
-        QBtn = QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+        q_btn = QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
 
-        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox = QDialogButtonBox(q_btn)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
 
@@ -323,6 +351,8 @@ class Window(QWidget):
         self.tabs.addTab(self.tab1, "General")
         self.tabs.addTab(self.tab3, "Check Res")
         self.tabs.addTab(self.tab2, "Settings")
+
+        self.sub_list = []
   
         # GENERAL
         # Group Box
@@ -332,6 +362,7 @@ class Window(QWidget):
         self.groupbox.setLayout(self.vbox)
 
         self.tab1.layout = QVBoxLayout(self)
+        self.subName = QHBoxLayout(self)
 
         # widgets
         # Generate Button
@@ -339,17 +370,22 @@ class Window(QWidget):
         self.generate.clicked.connect(self.start_scraper)
         self.generate.setFixedHeight(40)
 
+        self.add_button = QPushButton("Add", self)  
+        self.add_button.clicked.connect(self.add_sub)
+
         # Subreddit Name 
         self.inputSub = QLineEdit(self)
         self.inputSub.setFixedWidth(150)
         self.inputSub.setFixedHeight(30)
+        self.subName.addWidget(self.inputSub)
+        self.subName.addWidget(self.add_button)
 
         # Images Number 
-        self.imagesNum = QSpinBox(self)
-        self.imagesNum.setRange(0, 5000)
-        self.imagesNum.setFixedWidth(60)
-        self.imagesNum.setFixedHeight(30)
-        self.imagesNum.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.images_num = QSpinBox(self)
+        self.images_num.setRange(0, 5000)
+        self.images_num.setFixedWidth(60)
+        self.images_num.setFixedHeight(30)
+        self.images_num.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Progress Bar
         self.progress_bar = QProgressBar(self)
@@ -378,8 +414,8 @@ class Window(QWidget):
         self.tab1.layout.addWidget(self.msg_label)
 
         self.tab1.layout.addWidget(self.groupbox)
-        self.vbox.addWidget(self.inputSub)
-        self.vbox.addWidget(self.imagesNum)
+        self.vbox.addLayout(self.subName)
+        self.vbox.addWidget(self.images_num)
         self.vbox.addWidget(self.sort_method)
         self.vbox.addWidget(self.nsfw)
         self.vbox.addWidget(self.generate)
@@ -488,11 +524,27 @@ class Window(QWidget):
         self.setLayout(self.layout)
 
     # Buttons Functions 
+    def add_sub(self):
+        sub = self.inputSub.text()
+        images_num = self.images_num.value()
+        sort_method = str(self.sort_method.currentText())
+        nsfw_toggle = self.nsfw.isChecked()
+        if (images_num == 0 or len(sub) == 0):
+                self.msg_label.setText("Inserted Data are not valid")
+                return None
+        if(sub_exists(sub) == False):
+            self.msg_label.setText("Subreddit name not valid")
+        else:
+            request = Request(sub, images_num, sort_method, nsfw_toggle)
+            self.sub_list.append(request)
+            self.msg_label.setText("Request Added to Queue")
+
     def open_dir(self):
         try:
             os.startfile(images_dir)
         except:
             self.msg_label.setText("Cannot find the requested directory")
+            raise
 
     def delete_images(self):
         button = QMessageBox.question(self, "Confirm Deletion", "Delete All images in:\n" + images_dir + " ?")
@@ -508,34 +560,35 @@ class Window(QWidget):
         if (internet_connection()):
             # Check if there are other processes working 
             
-            self.progress_bar.setValue(0)
-            imagesNum = self.imagesNum.value()
-            subName = str(self.inputSub.text())
-            sortMethod = str(self.sort_method.currentText())
+            '''self.progress_bar.setValue(0)
+            images_num = self.images_num.value()
+            sub_name = str(self.inputSub.text())
+            sort_method = str(self.sort_method.currentText())
             nsfw_toggle = self.nsfw.isChecked()
             
 
             # check if data has been entered
-            if (imagesNum == 0 or len(subName) == 0):
+            if (images_num == 0 or len(sub_name) == 0):
                 self.msg_label.setText("Inserted Data are not valid")
                 return None
-            self.progress_bar.setMaximum(imagesNum)
+            self.progress_bar.setMaximum(images_num)
 
             # check if the subreddit name entered corrispond to an existent subreddit 
-            if (sub_exists(subName) == False):
+            if (sub_exists(sub_name) == False):
                 self.msg_label.setText("Subreddit name not valid")
-                return None
-            
-            # Everything Good
-            #if(len(process_manager) == 0)
+                return None'''
+            _len = 0
 
-            self.msg_label.setText("Downloading images...")
+            for request in self.sub_list:
+
+                _len += request.images_num
+
+            self.progress_bar.setMaximum(_len)
+            
             #self.generate.setEnabled(False)
-            self.worker = Worker(subName, imagesNum, sortMethod, nsfw_toggle, self)
+
+            self.worker = worker1(self.sub_list, self.progress_bar, self.msg_label, self)
             self.worker.start()
-            # Connect Signals
-            self.worker.image_download.connect(self.update_bar)
-            self.worker.finished.connect(self.worker_finished)
         else: # Network not working 
             self.msg_label.setText("Connect To a Network And Retry!")
 
@@ -559,10 +612,10 @@ class Window(QWidget):
         width = int(self.width_input.text())
         height = int(self.height_input.text())
         ratio = self.check_ar.isChecked()
-        type = self.type_selector.currentText()
+        _type = self.type_selector.currentText()
         minw = 1280
         minh = 720
-        self.res_check = resWorker(width, height, ratio, minw, minh, type)
+        self.res_check = ResWorker(width, height, ratio, minw, minh, _type)
         self.res_check.start()
         #self.res_check.finished.connect(self.res_checkfin)
 
@@ -579,16 +632,22 @@ class Window(QWidget):
         self.dir_label.setText("dir:\n" + self.file)
 
     def worker_finished(self):
-        self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.imagesNum.value()))
+        self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.images_num.value()))
         self.generate.setEnabled(True)
         if (self.progress_bar.value() < self.progress_bar.maximum()):
             self.progress_bar.setValue(self.progress_bar.maximum())
+
+        self.worker.quit()
+        self.worker.wait()
+        
         if(self.to_run_auto.isChecked()):
+            self.tabs.setCurrentIndex(1)
             self.run_rescheck()
 
     def update_bar(self, value):
+        #self.msg_label.setText("Downloaded: " + str(value) + "/" + (self.images_num.value()))
         if(self.progress_bar.value() < self.progress_bar.maximum()):
-            self.progress_bar.setValue(value)
+            self.progress_bar.setValue(self.progress_bar.value() + 1)
 
 class App(QMainWindow):
     def __init__(self):
