@@ -162,6 +162,7 @@ class ResWorker(QThread):
                 return str(base_ratio)
             
 class worker1(QThread):
+    finished = pyqtSignal()
     def __init__(self, sub_list, prog_bar, msg_label, window_instance):
         super().__init__()
         self.sub_list = sub_list 
@@ -171,6 +172,7 @@ class worker1(QThread):
 
     def run(self):
         self.startWorker()
+        #self.finished.emit()
         
     def startWorker(self):
         for request in self.sub_list:
@@ -186,6 +188,7 @@ class worker1(QThread):
             self.worker.finished.connect(self.window_instance.worker_finished)
             self.worker.start()
             self.worker.wait()
+
 
 # Credits to impshum(https://github.com/impshum) for his project 'Multithreaded-Reddit-Image-Downloader'(https://github.com/impshum/Multithreaded-Reddit-Image-Downloader)
 class Worker(QThread):
@@ -223,33 +226,50 @@ class Worker(QThread):
             self.image_download.emit(self.downloaded_count)
 
     def startScraper(self):
-        images = []
         try:
-            go = 0
-            if self.order == 'hot':
-                submissions = self.reddit.subreddit(self.sub).hot(limit=None)
-            elif self.order == 'top':
-                submissions = self.reddit.subreddit(self.sub).top(limit=None)
-            elif self.order == 'new':
-                submissions = self.reddit.subreddit(self.sub).new(limit=None)
-
-            for submission in submissions:
-                if not submission.stickied and submission.over_18 == self.nsfw \
-                        and submission.url.endswith(('jpg', 'jpeg', 'png')):
-                    fname = self.path + \
-                        re.search('.*\w/(.*)', submission.url).group(1)
-                    if not os.path.isfile(fname):
-                        images.append({'url': submission.url, 'fname': fname})
-                        go += 1
-                        if go >= self.limit:
-                            break
+            images = self.get_images()
             if len(images):
-                if not os.path.exists(self.path):
-                    os.makedirs(self.path)
-                with concurrent.futures.ThreadPoolExecutor() as ptolemy:
-                    ptolemy.map(self.download, images)
+                self.create_directory()
+                self.download_images(images)
         except Exception as e:
             print(e)
+        
+def get_images(self):
+    images = []
+    submissions = self.get_submissions()
+    go = 0
+    
+    for submission in submissions:
+        if not submission.stickied and submission.over_18 == self.nsfw \
+                and submission.url.endswith(('jpg', 'jpeg', 'png')):
+            fname = self.get_file_name(submission.url)
+            if not os.path.isfile(fname):
+                images.append({'url': submission.url, 'fname': fname})
+                go += 1
+                if go >= self.limit:
+                    break
+
+    return images
+
+def get_submissions(self):
+    if self.order == 'hot':
+        return self.reddit.subreddit(self.sub).hot(limit=None)
+    elif self.order == 'top':
+        return self.reddit.subreddit(self.sub).top(limit=None)
+    elif self.order == 'new':
+        return self.reddit.subreddit(self.sub).new(limit=None)
+
+def get_file_name(self, url):
+    return self.path + re.search('.*\w/(.*)', url).group(1)
+
+def create_directory(self):
+    if not os.path.exists(self.path):
+        os.makedirs(self.path)
+
+def download_images(self, images):
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        executor.map(self.download, images)
+
 # WINDOWS
 class DialogYN(QDialog):
     def __init__(self, msg):
@@ -269,34 +289,6 @@ class DialogYN(QDialog):
         self.layout.addWidget(self.buttonBox)
         self.setLayout(self.layout)
     
-'''class SettingsWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        
-        self.file = images_dir
-        self.setWindowTitle("Settings")
-
-        layout = QHBoxLayout()
-
-        self.dir_label = QLabel()
-        self.update_label()
-        self.change_dir = QPushButton("Change")
-        self.change_dir.clicked.connect(self.change_directory)
-
-        layout.addWidget(self.dir_label)
-        layout.addWidget(self.change_dir)
-
-        self.setLayout(layout)
-
-    def change_directory(self):
-        self.file = str(QFileDialog.getExistingDirectory(
-            self, "Select Directory") + "/")
-        self.update_label()
-
-    def update_label(self):
-        global images_dir
-        images_dir = self.file
-        self.dir_label.setText("dir: " + self.file)'''
 
 class Window(QWidget):
     def __init__(self, parent):
@@ -601,7 +593,6 @@ class Window(QWidget):
                 self.msg_label.setText("No directory selected!")
 
             for request in self.sub_list:
-
                 _len += request.images_num
 
             self.progress_bar.setMaximum(_len)
@@ -610,6 +601,7 @@ class Window(QWidget):
             #self.generate.setEnabled(False)
 
             self.worker = worker1(self.sub_list, self.progress_bar, self.msg_label, self)
+            self.worker.finished.connect(self.worker_finished)
             self.worker.start()
         elif(len(self.sub_list) <= 0):
             self.msg_label.setText("Add requests to generate")
