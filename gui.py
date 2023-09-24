@@ -71,6 +71,7 @@ class Request():
         self.nsfw = nsfw
 
 class ResWorker(QThread):
+    finished = pyqtSignal()
     def __init__(self, width, height, ratio, minw, minh, type):
         super().__init__()
         self.width = width
@@ -81,7 +82,7 @@ class ResWorker(QThread):
         self.type = type
         self.deleted = 0 
 
-    def start(self):
+    def run(self):
         if(self.height != 0):
             aspect = self.calculate_aspect(self.width, self.height)
 
@@ -102,6 +103,7 @@ class ResWorker(QThread):
                 if(fm < thresh):
                     img.close()
                     os.remove(os.path.join(folder_dir, images))
+                    self.deleted += 1
                     continue
                 wid, hgt = img.size
                 if(self.ratio == True):
@@ -124,6 +126,8 @@ class ResWorker(QThread):
                     elif(self.type == "bright" and not(self.isbright(image)) or self.type == "dark" and self.isbright(image)):
                         img.close()
                         os.remove(os.path.join(folder_dir, images))
+                        self.deleted += 1
+        self.finished.emit()
                 
 
     # Credits to imneonizer(https://github.com/imneonizer) for his project 'How-to-find-if-an-image-is-bright-or-dark' (https://github.com/imneonizer/How-to-find-if-an-image-is-bright-or-dark)
@@ -170,14 +174,18 @@ class worker1(QThread):
         
     def startWorker(self):
         for request in self.sub_list:
-                    self.prog_bar.setValue(0)
-                    self.msg_label.setText("Downloading images!")
-                    self.worker = Worker(request.sub, request.images_num, request.sort_method, request.nsfw, self.window_instance)
-                    # Connect Signals
-                    self.worker.image_download.connect(self.window_instance.update_bar)
-                    self.worker.finished.connect(self.window_instance.worker_finished)
-                    self.worker.start()
-                    self.worker.wait()
+            _len += request.images_num
+
+        self.prog_bar.SetMaximum(_len)
+
+        for request in self.sub_list:
+            self.msg_label.setText("Downloading images from " + str(request.sub))
+            self.worker = Worker(request.sub, request.images_num, request.sort_method, request.nsfw, self.window_instance)
+            # Connect Signals
+            self.worker.image_download.connect(self.window_instance.update_bar)
+            self.worker.finished.connect(self.window_instance.worker_finished)
+            self.worker.start()
+            self.worker.wait()
 
 # Credits to impshum(https://github.com/impshum) for his project 'Multithreaded-Reddit-Image-Downloader'(https://github.com/impshum/Multithreaded-Reddit-Image-Downloader)
 class Worker(QThread):
@@ -351,7 +359,7 @@ class Window(QWidget):
   
         # Add tabs
         self.tabs.addTab(self.tab1, "General")
-        self.tabs.addTab(self.tab3, "Check Res")
+        self.tabs.addTab(self.tab3, "Check")
         self.tabs.addTab(self.tab2, "Settings")
 
         self.sub_list = []
@@ -510,7 +518,7 @@ class Window(QWidget):
         self.height_layout.addWidget(self.height_input)
 
         # msg label
-        self.msg_labelres = QLabel("a")
+        self.msg_labelres = QLabel("")
         self.msg_labelres.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.msg_labelres.setFixedHeight(20)
 
@@ -598,6 +606,7 @@ class Window(QWidget):
 
             self.progress_bar.setMaximum(_len)
             
+            
             #self.generate.setEnabled(False)
 
             self.worker = worker1(self.sub_list, self.progress_bar, self.msg_label, self)
@@ -624,6 +633,7 @@ class Window(QWidget):
 
 
     def run_rescheck(self):
+        self.msg_labelres.setText("Scanning Images...")
         width = int(self.width_input.text())
         height = int(self.height_input.text())
         ratio = self.check_ar.isChecked()
@@ -636,7 +646,7 @@ class Window(QWidget):
 
     def res_checkfin(self):
         deleted = self.res_check.get_deleted()
-        self.msg_labelres.setText("Deleted Images: " + deleted)
+        self.msg_labelres.setText("Deleted Images: " + str(deleted))
 
 
     def update_label(self):
