@@ -30,7 +30,7 @@ config.read('conf.ini')
 reddit = praw.Reddit(client_id=config['REDDIT']['client_id'],
                      client_secret=config['REDDIT']['client_secret'],
                      user_agent='RedditWallpaperScraper')
-images_dir = "" 
+images_dir = str(config['DIR']['folderDir'])
 
 # GLOBAL FUNCTIONS 
 def delete_files_in_directory(directory_path):
@@ -55,6 +55,8 @@ def sub_exists(sub):
     exists = True
     try:
         reddit.subreddits.search_by_name(sub, exact=True)
+        
+            
     except NotFound:
         exists = False
     return exists
@@ -427,8 +429,10 @@ class Window(QWidget):
         
 
         # SETTINGS
-
-        self.dir_layout = QVBoxLayout(self)
+        
+        self.dir_layout = QHBoxLayout(self)
+        self.client_id_layout = QHBoxLayout(self)
+        self.client_secret_layout = QHBoxLayout(self)
         self.tab2.layout = QVBoxLayout(self)
         
         # widgets 
@@ -441,20 +445,38 @@ class Window(QWidget):
         self.openDir.setIcon(QIcon('folder.png'))
         self.openDir.clicked.connect(self.open_dir)
     
+        # Reddit Data
+        self.client_id_label = QLabel("client_id:")
+        self.client_id = QLineEdit()
+        self.client_id_layout.addWidget(self.client_id_label)
+        self.client_id_layout.addWidget(self.client_id)
+        self.client_id.setText(str(config['REDDIT']['client_id']))
+        self.client_id.editingFinished.connect(self.id_finish)
+        self.client_secret_label = QLabel("client_secret:")
+        self.client_secret = QLineEdit()
+        self.client_secret_layout.addWidget(self.client_secret_label)
+        self.client_secret_layout.addWidget(self.client_secret)
+        self.client_secret.editingFinished.connect(self.secret_finish)
+        self.client_secret.setText(str(config['REDDIT']['client_secret']))
+        
 
         # Directory Label
-        self.dir_label = QLabel()
+        self.dir_line = QLineEdit()
+        self.dir_line.setReadOnly(True) 
+        self.dir_label = QLabel("dir: ")
         self.update_label()
         # Change Dir Button
         self.change_dir = QPushButton("Change")
         self.change_dir.clicked.connect(self.change_directory)
 
         self.dir_layout.addWidget(self.dir_label)
+        self.dir_layout.addWidget(self.dir_line)
         self.dir_layout.addWidget(self.change_dir)
         
         
         # layout
-        self.tab2.layout.addWidget(self.dir_label)
+        self.tab2.layout.addLayout(self.client_id_layout)
+        self.tab2.layout.addLayout(self.client_secret_layout)
         self.tab2.layout.addLayout(self.dir_layout)
         self.tab2.layout.addWidget(self.openDir)
         self.tab2.layout.addWidget(self.delete_all)
@@ -532,9 +554,21 @@ class Window(QWidget):
         self.setLayout(self.layout)
 
         
+    def id_finish(self):
+        config['REDDIT']['client_id'] = self.client_id.text()
+        with open('conf.ini', 'w') as configfile:
+            config.write(configfile)
+
+    def secret_finish(self):
+        config['REDDIT']['client_secret'] = self.client_secret.text()
+        with open('conf.ini', 'w') as configfile:
+            config.write(configfile)
 
     # Buttons Functions 
     def add_sub(self):
+        if(len(config['REDDIT']["client_id"]) == 0 or len(config['REDDIT']["client_secret"]) == 0):
+                self.msg_label.setText("r client_id or client_secret not set correctly")
+                return
         sub = self.inputSub.text()
         images_num = self.images_num.value()
         sort_method = str(self.sort_method.currentText())
@@ -542,7 +576,11 @@ class Window(QWidget):
         if (images_num == 0 or len(sub) == 0):
                 self.msg_label.setText("Inserted Data are not valid")
                 return None
-        if(sub_exists(sub) == False):
+        try: sub_state = sub_exists(sub)
+        except: 
+            self.msg_label.setText("client_id or client_secret not set correctly")
+            return
+        if(sub_state == False):
             self.msg_label.setText("Subreddit name not valid")
         else:
             request = Request(sub, images_num, sort_method, nsfw_toggle)
@@ -570,32 +608,14 @@ class Window(QWidget):
         if (internet_connection() and len(self.sub_list) != 0):
             # Check if there are other processes working 
             
-            '''self.progress_bar.setValue(0)
-            images_num = self.images_num.value()
-            sub_name = str(self.inputSub.text())
-            sort_method = str(self.sort_method.currentText())
-            nsfw_toggle = self.nsfw.isChecked()
             
-
-            # check if data has been entered
-            if (images_num == 0 or len(sub_name) == 0):
-                self.msg_label.setText("Inserted Data are not valid")
-                return None
-            self.progress_bar.setMaximum(images_num)
-
-            # check if the subreddit name entered corrispond to an existent subreddit 
-            if (sub_exists(sub_name) == False):
-                self.msg_label.setText("Subreddit name not valid")
-                return None'''
-            _len = 0
 
             if len(images_dir) <= 3:
                 self.msg_label.setText("No directory selected!")
 
-            for request in self.sub_list:
-                _len += request.images_num
+            
 
-            self.progress_bar.setMaximum(_len)
+            self.progress_bar.setMaximum(100)
             
             
             #self.generate.setEnabled(False)
@@ -644,7 +664,10 @@ class Window(QWidget):
     def update_label(self):
         global images_dir
         images_dir = self.file
-        self.dir_label.setText("dir:\n" + self.file)
+        config['DIR']['folderDir'] = self.file
+        with open('conf.ini', 'w') as configfile:
+            config.write(configfile)
+        self.dir_line.setText(self.file)
 
     def worker_finished(self):
         self.msg_label.setText("Downloaded: " + str(self.downloaded_images) + "/" + str(self.images_num.value()))
