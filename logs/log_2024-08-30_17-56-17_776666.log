@@ -1,0 +1,2 @@
+2024-08-30 17:56:17.780 | INFO     | main:load_queries:24 - No queries.dat file found
+2024-08-30 17:56:18.108 | DEBUG    | __main__:clear_table:44 - Clearing Queries Table

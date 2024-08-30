@@ -1,9 +1,0 @@
-requests
-praw
-configparser
-argparse
-pillow
-numpy
-opencv-python
-pyautogui
-pyqt6
