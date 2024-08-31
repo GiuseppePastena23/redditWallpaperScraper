@@ -11,8 +11,8 @@ import requests
 
 load_dotenv()
 
-CLIENT_ID = os.getenv('CLIENT_ID', '')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET', '')
+CLIENT_ID = os.getenv('CLIENT_ID', "")
+CLIENT_SECRET = os.getenv('CLIENT_SECRET', "")
 reddit = praw.Reddit(client_id=CLIENT_ID,
                      client_secret=CLIENT_SECRET,
                      user_agent='RedditWallpaperScraper')
@@ -21,12 +21,13 @@ images_dir = os.getenv('DIR', 'images/')
 logger.debug(f"images_dir set to: {images_dir}")
 
 class Scraper:
-    def __init__(self, sub, limit, order, nsfw=False):
+    def __init__(self, sub, limit, order, filter, nsfw=False):
         self.sub = sub
         self.limit = limit
         self.order = order
         self.nsfw = nsfw
         self.path = f'{images_dir}/{sub}/'
+        self.filter = filter
         self.reddit = reddit  # Assume `reddit` is initialized elsewhere
         
     
@@ -58,25 +59,25 @@ class Scraper:
         last_submission = None
 
         fetch_methods = {
-            'hot': self.reddit.subreddit(self.sub).hot, 
-            'top': self.reddit.subreddit(self.sub).top,
-            'new': self.reddit.subreddit(self.sub).new,
+            'hot': lambda limit, after: self.reddit.subreddit(self.sub).hot(limit=limit, params={"after": after}),
+            'top': lambda limit, after, time_filter=str(self.filter): self.reddit.subreddit(self.sub).top(time_filter=time_filter, limit=limit, params={"after": after}),
+            'new': lambda limit, after: self.reddit.subreddit(self.sub).new(limit=limit, params={"after": after}),
         }
 
         fetch_method = fetch_methods.get(self.order)
 
         while len(submissions) < self.limit:
-            new_submissions = list(fetch_method(limit=None, params={"after": last_submission}))
+            # Calculate how many submissions to fetch in this batch
+            remaining = self.limit - len(submissions)
+            
+            # Fetch new submissions
+            new_submissions = list(fetch_method(limit=remaining, after=last_submission))
 
             if not new_submissions:
-                break 
+                break
 
             submissions.extend(new_submissions)
-            last_submission = submissions[-1].fullname 
-            
-            if len(submissions) >= self.limit:
-                submissions = submissions[:self.limit]
-                break
+            last_submission = submissions[-1].fullname
 
         return submissions
     

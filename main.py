@@ -33,8 +33,8 @@ def is_subreddit(sub_name, exact):
     try:
         logger.info("Subreddit found")
         reddit.subreddits.search_by_name(sub_name, exact=exact)
-    except NotFound:
-        logger.info("Subreddit not found")
+    except Exception as e:
+        logger.error(f"Exception details: {e.__class__.__name__}")
         exists = False
     return exists
         
@@ -77,7 +77,7 @@ def generate():
         futures = []
 
         for query in Queries:
-            worker = scraper.Scraper(query.sub, query.images_number, query.sort_method, query.nsfw)
+            worker = scraper.Scraper(query.sub, query.images_number, query.sort_method, query.filter, query.nsfw)
             future = executor.submit(worker.start)
             futures.append(future)
 

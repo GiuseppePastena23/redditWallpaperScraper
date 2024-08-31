@@ -8,12 +8,8 @@ import resolutionChecker
 import wx
 import scraper
 
-
 outp= wx.App(False)
 screen_width, screen_height= wx.GetDisplaySize()
-
-
-
 
 def update_query_table():
     clear_table("query_table")
@@ -47,11 +43,12 @@ def clear_table(table_tag):
 
 def addquery_callback():
     subreddit_name =  dpg.get_value("subreddit_input")
-    exact_name = dpg.get_value("exact_name_value")
+    exact_name = True
     images_num = dpg.get_value("images_num")
     sort_value = dpg.get_value("sort_value")
     nsfw_value = dpg.get_value("nsfw_value")
-    query = Query.Query(subreddit_name, images_num, sort_value, nsfw_value)
+    time_filter_value = dpg.get_value("filter_value")
+    query = Query.Query(subreddit_name, images_num, sort_value, nsfw_value, time_filter_value)
     try: 
         main.add_query(query, exact_name)
         dpg.set_value(item="query_error", value="Correctly Added Query")
@@ -63,9 +60,14 @@ def addquery_callback():
         
 #TODO: multithreading
 def generate_callback():
-    logger.info("Generating...")
+    if(dpg.get_value("client_id_input") is None or dpg.get_value("client_secret_input") is None):
+            dpg.configure_item(generate_button, enabled = False)
+            dpg.set_value("gen_info", value="Set Reddit API values in settings")
+
     if len(main.Queries) > 0:
+        dpg.set_value("gen_info", value="Generating Please Wait")
         main.generate()
+        dpg.set_value("gen_info", value="Finished Generating")
         
 def min_res_callback():
     value = dpg.get_value("min_res_check")
@@ -92,6 +94,12 @@ def run_callback():
     resWorker.run()
     logger.info("Running Resokution Check")
 
+def sort_changed_callback():
+    if(dpg.get_value("sort_value") == "top"):
+        dpg.show_item("filter_value")
+    else:
+        dpg.hide_item("filter_value")
+
 def open_folder_callback():
     logger.info("Opening media folder")
 
@@ -111,37 +119,25 @@ dpg.create_viewport(title='Custom Title', width=600, height=400)
 dpg.setup_dearpygui()
 dpg.set_exit_callback(on_exit)
 
+
+
 sorting = ["top", "new", "hot"]
 color_options = ["both", "bright", "dark"]
+top_categories = ["all", "day", "hour", "month", "week", "year"]
 
 # Query Builder Window
 with dpg.window(label="Add Query", width=300, height=200, pos=(0, 0)):
     dpg.add_input_text(label="Subreddit", tag="subreddit_input")
-    dpg.add_checkbox(label="Exact name?", tag="exact_name_value")
+    #dpg.add_checkbox(label="Exact name?", tag="exact_name_value")
     dpg.add_input_int(label="# Images", tag="images_num")
-    dpg.add_combo(label="Sorting", items=sorting, tag="sort_value")
+    dpg.add_combo(label="Sorting", items=sorting, tag="sort_value", callback=sort_changed_callback)
+    dpg.add_combo(label="Top Time Filter", items=top_categories, tag="filter_value", default_value="all")
+    dpg.hide_item("filter_value")
     dpg.add_checkbox(label="NSFW", tag="nsfw_value")
     dpg.add_button(label="Add", callback=addquery_callback)
     dpg.add_text("", tag="query_error")
-
-
-# Generate Window
-with dpg.window(label="Generate", width=300, height=200, pos=(0, 210)):
     
-    dpg.add_text("Add query", tag="gen_info")
-    with dpg.group(horizontal=True):
-        dpg.add_button(label="Generate", callback=generate_callback)
-        dpg.add_button(label="Stop", callback=None, enabled=False)
-    with dpg.table(tag="query_table", row_background=True,
-                   borders_innerH=True, borders_outerH=True, borders_innerV=True,
-                   borders_outerV=True):
-        dpg.add_table_column(label="ID")
-        dpg.add_table_column(label="sub_name")
-        dpg.add_table_column(label="#_images")
-        dpg.add_table_column(label="sort")
-        dpg.add_table_column(label="nsfw")
-        dpg.add_table_column(label="actions")
-        
+
 # Resolution Check Window
 with dpg.window(label="Check", width=300, height=200, pos=(310, 0)):
     dpg.add_checkbox(label="Run after generating", tag="run_after_generate")
@@ -158,11 +154,33 @@ with dpg.window(label="Check", width=300, height=200, pos=(310, 0)):
 
 # Settings Window
 with dpg.window(label="Settings", width=300, height=200, pos=(310, 210)):
-    dpg.add_input_text(label="Client ID", default_value=scraper.CLIENT_ID)
-    dpg.add_input_text(label="Client Secret", default_value=scraper.CLIENT_SECRET)
+    client_id_input = dpg.add_input_text(label="Client ID", default_value=scraper.CLIENT_ID)
+    client_secret_input = dpg.add_input_text(label="Client Secret", default_value=scraper.CLIENT_SECRET)
     dpg.add_button(label="Folder Chooser", callback=lambda: print("Folder Chooser"))
     dpg.add_button(label="Open Folder", callback=open_folder_callback)
     dpg.add_button(label="Delete All Images", callback=delete_all_images_callback)
+
+# Generate Window
+with dpg.window(label="Generate", width=300, height=200, pos=(0, 210)):
+    
+    dpg.add_text("Add query", tag="gen_info")
+    with dpg.group(horizontal=True):
+        generate_button = dpg.add_button(label="Generate", callback=generate_callback)
+        # TODO
+        # dpg.add_button(label="Stop", callback=None, enabled=False)
+    with dpg.table(tag="query_table", row_background=True,
+                   borders_innerH=True, borders_outerH=True, borders_innerV=True,
+                   borders_outerV=True):
+        dpg.add_table_column(label="ID")
+        dpg.add_table_column(label="sub_name")
+        dpg.add_table_column(label="#_images")
+        dpg.add_table_column(label="sort")
+        dpg.add_table_column(label="nsfw")
+        dpg.add_table_column(label="actions")
+        
+
+
+
 
 update_query_table()
 dpg.show_viewport()
