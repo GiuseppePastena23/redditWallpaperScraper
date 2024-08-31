@@ -2,7 +2,6 @@
 /images
 .env
 *.log
-*.dat
 /__pycache__
 /__pycache__
 __pycache__/main.cpython-312.pyc
