@@ -1,0 +1,11 @@
+
+/images
+.env
+*.log
+*.dat
+/__pycache__
+/__pycache__
+__pycache__/main.cpython-312.pyc
+__pycache__/Query.cpython-312.pyc
+__pycache__/resolutionChecker.cpython-312.pyc
+__pycache__/scraper.cpython-312.pyc
